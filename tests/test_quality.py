@@ -1105,3 +1105,36 @@ def test_auto_clean_explain_dry_run_error(tmp_path):
         ValueError, match="explain=True cannot be used with dry_run=True"
     ):
         ar.auto_clean(frame, explain=True, dry_run=True)
+
+
+def test_compare_profiles_under_threshold_is_ok():
+    """Changes below warning thresholds should result in 'ok' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 0.1 to keep std constant but shift mean slightly
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.1, 11.1, 12.1]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "ok"
+    assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_above_warning_threshold_is_warning():
+    """Changes above warning but below changed threshold should result in 'warning' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 1.8 to trigger warning status (approx 15% shift)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [11.8, 12.8, 13.8]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "warning"
+    assert comparison.status_counts == {"ok": 0, "warning": 1, "changed": 0}
+
+
+def test_compare_profiles_above_changed_threshold_is_changed():
+    """Changes above changed threshold should result in 'changed' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 5.0 to trigger changed status (approx 45% shift)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [15.0, 16.0, 17.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "changed"
+    assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
